@@ -3,44 +3,15 @@ const std = @import("std");
 const batteries = @embedFile("day03.txt");
 
 fn total_joltage(alloc: std.mem.Allocator, input: []const u8) !u64 {
-    var pool: std.Thread.Pool = undefined;
-    try pool.init(.{
-        .allocator = alloc,
-    });
-    defer pool.deinit();
-
-    var joltage = std.atomic.Value(u64).init(0);
-    var wg: std.Thread.WaitGroup = .{};
+    var joltage: u64 = 0;
 
     var it = std.mem.tokenizeScalar(u8, input, '\n');
     while (it.next()) |line| {
-        const task = try alloc.create(Task);
-        task.* = .{
-            .alloc = alloc,
-            .line = line,
-            .total = &joltage,
-        };
-
-        pool.spawnWg(&wg, add_joltage, .{task});
+        const bank = std.mem.trim(u8, line, " ");
+        joltage += try max_joltage(alloc, bank);
     }
-    pool.waitAndWork(&wg);
 
-    return joltage.load(.acquire);
-}
-
-const Task = struct {
-    alloc: std.mem.Allocator,
-    line: []const u8,
-    total: *std.atomic.Value(u64),
-};
-
-fn add_joltage(task: *Task) void {
-    defer task.alloc.destroy(task);
-
-    const bank = std.mem.trim(u8, task.line, " ");
-    const result = max_joltage(task.alloc, bank) catch return;
-
-    _ = task.total.fetchAdd(result, .release);
+    return joltage;
 }
 
 fn max_joltage(alloc: std.mem.Allocator, bank: []const u8) !u64 {
