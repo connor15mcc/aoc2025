@@ -9,22 +9,38 @@ const dirs = [_][2]i32{
 };
 
 fn accessible_paper(alloc: std.mem.Allocator, input: []const u8) !u64 {
-    var grid = std.ArrayList([]const u8).empty;
+    var grid = std.ArrayList([]u8).empty;
     defer grid.deinit(alloc);
 
     var it = std.mem.tokenizeScalar(u8, input, '\n');
     while (it.next()) |line| {
-        try grid.append(alloc, line);
+        const owned = try alloc.dupe(u8, line);
+        try grid.append(alloc, owned);
     }
 
+    const grid_owned = try grid.toOwnedSlice(alloc);
+    defer {
+        for (grid_owned) |line| {
+            alloc.free(line);
+        }
+        alloc.free(grid_owned);
+    }
+
+    var total_removed: u64 = 0;
+    while (try remove_accessible(grid_owned)) |removed| {
+        total_removed += removed;
+    }
+    return total_removed;
+}
+
+fn remove_accessible(grid: [][]u8) !?u64 {
     var accessible: u64 = 0;
 
-    const rows = grid.items.len;
+    const rows = grid.len;
     std.debug.assert(rows > 0);
-    const cols = grid.items[0].len;
+    const cols = grid[0].len;
 
-    for (0.., grid.items) |i, row| {
-        std.debug.print("row: {s}\n", .{row});
+    for (0.., grid) |i, row| {
         for (0.., row) |j, cell| {
             if (cell != '@') continue;
 
@@ -37,16 +53,18 @@ fn accessible_paper(alloc: std.mem.Allocator, input: []const u8) !u64 {
 
                 const ni_usize = @as(usize, @intCast(ni));
                 const nj_usize = @as(usize, @intCast(nj));
-                if (grid.items[ni_usize][nj_usize] == '@') {
+                if (grid[ni_usize][nj_usize] == '@') {
                     num_neighbors += 1;
                 }
             }
 
             if (num_neighbors < 4) {
                 accessible += 1;
+                grid[i][j] = '.';
             }
         }
     }
+    if (accessible == 0) return null;
     return accessible;
 }
 
@@ -78,5 +96,5 @@ test "provided example" {
         \\.@@@@@@@@.
         \\@.@.@@@.@.
     ;
-    try std.testing.expectEqual(13, accessible_paper(alloc, input));
+    try std.testing.expectEqual(43, accessible_paper(alloc, input));
 }
